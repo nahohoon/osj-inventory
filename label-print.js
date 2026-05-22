@@ -4,7 +4,7 @@
  * OSJ 품목마스터: code / name / spec / unit / category
  * QR 데이터 = slot.b (품목코드만)
  */
-console.log('[LP] label-print.js version = 20260522-final-autocomplete-pick-debug');
+console.log('[LP] label-print.js version = 20260522-bindfix-qrguard-removed');
 
 var LabelPrint = (function () {
 
@@ -382,6 +382,8 @@ var LabelPrint = (function () {
      그리드 렌더링
   ════════════════════════════════════════ */
   function renderGrid() {
+    /* init()이 호출되지 않아도 이벤트가 항상 연결되도록 안전망 호출 */
+    _bindEvents();
     ensureLabelSlots();
     _applyVars();
     _buildSS();
@@ -500,3 +502,15 @@ var LabelPrint = (function () {
     clearSlots: _clearAll
   };
 })();
+
+/* 외부(index.html 탭 전환 등)에서 강제 바인딩 가능하도록 노출 */
+window.OSJLabelPrintBindEvents = (function() {
+  /* LabelPrint 모듈 내부 _bindEvents에 직접 접근은 불가하므로,
+     renderGrid를 통해 간접 트리거 */
+  return function() {
+    if (typeof LabelPrint !== 'undefined' && LabelPrint.renderGrid) {
+      console.log('[LP] OSJLabelPrintBindEvents called — triggering via renderGrid');
+      LabelPrint.renderGrid();
+    }
+  };
+}());

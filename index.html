@@ -1836,9 +1836,15 @@ function goTab(name){
   try{
     if(name==='label'){
       initLabelPrint();
-      if(typeof LabelPrint!=='undefined'&&LabelPrint.renderGrid){
-        requestAnimationFrame(function(){ LabelPrint.renderGrid(); });
-      }
+      requestAnimationFrame(function(){
+        if(typeof LabelPrint!=='undefined'){
+          if(LabelPrint.renderGrid) LabelPrint.renderGrid();
+          /* _bindEvents가 init 전에 호출될 경우를 대비한 안전망 */
+          if(typeof window.OSJLabelPrintBindEvents==='function'){
+            window.OSJLabelPrintBindEvents();
+          }
+        }
+      });
     }
   }catch(e){console.error('[라벨]',e);}
   try{if(name==='stats')renderStats();}catch(e){}
@@ -3233,12 +3239,12 @@ function stopAutoSync(){
 /* ─── QR/바코드 라벨 출력 초기화 ─── */
 function initLabelPrint(){
   if(typeof LabelPrint==='undefined'){
-    console.error('[라벨] label-print.js / qrcode.min.js 로드 실패');
+    console.error('[라벨] label-print.js 로드 실패');
     return;
   }
+  /* QRCode 미로드 시 경고만 출력, init은 계속 진행 (검색/슬롯 기능 정상 작동) */
   if(typeof QRCode==='undefined'){
-    console.error('[라벨] qrcode.min.js 로드 실패');
-    return;
+    console.warn('[라벨] qrcode.min.js 미로드 — QR 이미지 불가, 나머지 기능 계속');
   }
   LabelPrint.init({
     getMasterItems:getMaster,
