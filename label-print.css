@@ -317,4 +317,16 @@
     color:#1e3a8a!important;line-height:1.1!important;
     white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important
   }
+
+  /* ── 인쇄 테두리 제거 (오른쪽 잘림 방지) ── */
+  body.label-printing .label-print .lc,
+  body.label-printing .label-print .lc.empty{
+    border:none!important;
+    outline:none!important;
+    box-shadow:none!important
+  }
+  body.label-printing .label-print #label-grid{
+    border:none!important;
+    outline:none!important
+  }
 }

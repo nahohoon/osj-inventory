@@ -4,7 +4,7 @@
  * OSJ 품목마스터: code / name / spec / unit / category
  * QR 데이터 = slot.b (품목코드만)
  */
-console.log('[LP] label-print.js version = 20260522-bindfix-qrguard-removed');
+console.log('[LP] label-print.js version = 20260522-makeqr-fix-border-remove');
 
 var LabelPrint = (function () {
 
@@ -88,11 +88,13 @@ var LabelPrint = (function () {
     console.log('[LP] raw getMaster rows=', rows.length,
                 rows.length ? rows[0] : '(empty)');
     var result = (Array.isArray(rows) ? rows : []).map(function(r) {
+      var b = String(r.code || r.itemCode || r.barcode || r['품목코드'] || '').trim();
+      var n = String(r.name || r.itemName || r['품목명'] || '').trim();
       return {
-        b: String(r.code || r.itemCode || r.barcode || r['품목코드'] || '').trim(),
-        n: String(r.name || r.itemName || r['품목명'] || '').trim(),
-        s: String(r.spec  || r['규격']  || '').trim(),
-        u: String(r.unit  || r['단위']  || 'EA').trim(),
+        b: b || n,   /* QR 데이터: 코드 없으면 품명으로 대체 */
+        n: n || b,
+        s: String(r.spec     || r['규격'] || '').trim(),
+        u: String(r.unit     || r['단위'] || 'EA').trim(),
         c: String(r.category || r['분류'] || '').trim()
       };
     }).filter(function(x) { return x.b || x.n; });
@@ -261,16 +263,29 @@ var LabelPrint = (function () {
     if (cnt)   cnt.textContent   = getAllItems().length;
   }
   function _makeQR(container, code) {
-    console.log('[LP] makeQR data=', code);
-    var size = (getCurrentPreset().qrSize || 84);
+    var safeCode = String(code || '').trim() || 'N/A';
+    console.log('[LP] makeQR data=', safeCode, ' QRCode=', typeof QRCode);
     container.innerHTML = '';
+
+    if (typeof QRCode === 'undefined') {
+      console.error('[LP] QRCode library not loaded. Check qrcode.min.js path/order.');
+      container.textContent = 'QR로드실패';
+      return;
+    }
+
     try {
       new QRCode(container, {
-        text: code || ' ', width: size, height: size,
-        colorDark: '#000000', colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.L
+        text: safeCode,
+        width: 128,
+        height: 128,
+        colorDark:  '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
       });
-    } catch(e) { container.textContent = 'QR'; console.error('[LP] makeQR error', e); }
+    } catch(e) {
+      console.error('[LP] makeQR error:', e, ' data=', safeCode);
+      container.textContent = 'QR오류';
+    }
   }
 
   /* ════════════════════════════════════════
