@@ -1,11 +1,16 @@
 /**
- * QR/바코드 라벨 출력 — 프린텍 2×6 / 3×8 프리셋
+ * QR/바코드 라벨 출력 — 프린텍 2×6 / 3×8
  * LabelPrint.init({ getMasterItems, slotsKey, onToast })
- *
- * OSJ 품목마스터 키: code / name / spec / unit / category
- * QR 데이터: slot.b = 품목코드만
+ * OSJ 품목마스터: code / name / spec / unit / category
+ * QR 데이터 = slot.b (품목코드만)
  */
-var LabelPrint = (function() {
+
+/* ── 캐시 확인용 버전 로그 (콘솔에서 이 줄이 보이지 않으면 캐시 문제) ── */
+console.log('[LP] label-print.js version = 20260522-fix-direct-pick');
+
+var LabelPrint = (function () {
+
+  /* ── 내부 상태 ── */
   var SLOTS       = [];
   var _getItems   = null;
   var _slotsKey   = '';
@@ -14,34 +19,32 @@ var LabelPrint = (function() {
   var _clickBound = false;
   var _mt         = null;
 
-  /* ── 디버그 로그 (콘솔에서 확인) ── */
-  function _dbg() {
-    if (typeof console !== 'undefined' && console.log) {
-      console.log.apply(console, ['[LP]'].concat(Array.prototype.slice.call(arguments)));
-    }
+  /* ── 디버그 로그 ── */
+  function _log() {
+    try { console.log.apply(console, ['[LP]'].concat(Array.prototype.slice.call(arguments))); } catch(e) {}
   }
 
-  /* ── 프리셋 정의 ── */
-  var LABEL_PRESETS = {
-    '2x6':  { cols: 2, rows: 6, qrSize: 84, nameFont: 12, codeFont: 10, specFont: 8, padding: 5 },
-    '3x8':  { cols: 3, rows: 8, qrSize: 52, nameFont: 9,  codeFont: 8,  specFont: 7, padding: 3 },
-    large:  { cols: 2, rows: 4, qrSize: 96, nameFont: 13, codeFont: 11, specFont: 9, padding: 6 },
-    normal: { cols: 2, rows: 6, qrSize: 84, nameFont: 12, codeFont: 10, specFont: 8, padding: 5 },
-    small:  { cols: 3, rows: 8, qrSize: 52, nameFont: 9,  codeFont: 8,  specFont: 7, padding: 3 },
-    tiny:   { cols: 4, rows: 10, qrSize: 42, nameFont: 5, codeFont: 4.5, specFont: 4, padding: 1 }
+  /* ────────────────────────────────────────
+     프리셋 설정
+  ──────────────────────────────────────── */
+  var PRESETS = {
+    '2x6':  { cols:2, rows:6,  qrSize:84, nameFont:12, codeFont:10, specFont:8, padding:5 },
+    '3x8':  { cols:3, rows:8,  qrSize:52, nameFont:9,  codeFont:8,  specFont:7, padding:3 },
+    large:  { cols:2, rows:4,  qrSize:96, nameFont:13, codeFont:11, specFont:9, padding:6 },
+    normal: { cols:2, rows:6,  qrSize:84, nameFont:12, codeFont:10, specFont:8, padding:5 },
+    small:  { cols:3, rows:8,  qrSize:52, nameFont:9,  codeFont:8,  specFont:7, padding:3 },
+    tiny:   { cols:4, rows:10, qrSize:42, nameFont:5,  codeFont:4.5,specFont:4, padding:1 }
   };
 
   function _cfgKey() {
-    if (typeof CONFIG !== 'undefined' && CONFIG.CLIENT_ID) return CONFIG.CLIENT_ID + '_label_config';
-    return 'osj_label_config';
+    return (typeof CONFIG !== 'undefined' && CONFIG.CLIENT_ID)
+      ? CONFIG.CLIENT_ID + '_label_config'
+      : 'osj_label_config';
   }
 
   function getCurrentPreset() {
     var el = document.getElementById('labelPreset');
-    if (el) {
-      if (el.value === '3x8') return '3x8';
-      if (el.value === '2x6') return '2x6';
-    }
+    if (el && el.value === '3x8') return '3x8';
     try {
       var o = JSON.parse(localStorage.getItem(_cfgKey()) || 'null');
       if (o && (o.preset === '3x8' || o.preset === 'small' ||
@@ -62,9 +65,9 @@ var LabelPrint = (function() {
     }
   }
 
-  function getLabelConfig() {
+  function _getLabelConfig() {
     var preset = getCurrentPreset();
-    var base   = LABEL_PRESETS[preset] || LABEL_PRESETS['2x6'];
+    var base   = PRESETS[preset] || PRESETS['2x6'];
     try {
       var o = JSON.parse(localStorage.getItem(_cfgKey()) || 'null');
       if (o && Number(o.cols) > 0 && Number(o.rows) > 0) {
@@ -74,53 +77,125 @@ var LabelPrint = (function() {
         if (match) base = o;
       }
     } catch(e) {}
-    var cols   = Math.max(1, parseInt(base.cols,   10) || LABEL_PRESETS[preset].cols);
-    var rows   = Math.max(1, parseInt(base.rows,   10) || LABEL_PRESETS[preset].rows);
-    var qrSize = Math.max(32, parseInt(base.qrSize, 10) || LABEL_PRESETS[preset].qrSize);
-    return {
-      cols: cols, rows: rows, qrSize: qrSize,
-      nameFont: parseFloat(base.nameFont) || LABEL_PRESETS[preset].nameFont,
-      codeFont: parseFloat(base.codeFont) || LABEL_PRESETS[preset].codeFont,
-      specFont: parseFloat(base.specFont) || LABEL_PRESETS[preset].specFont,
-      padding:  parseFloat(base.padding)  || LABEL_PRESETS[preset].padding,
-      slotCount: cols * rows, preset: preset
-    };
+    var cols   = Math.max(1, parseInt(base.cols,   10) || PRESETS[preset].cols);
+    var rows   = Math.max(1, parseInt(base.rows,   10) || PRESETS[preset].rows);
+    var qrSize = Math.max(32, parseInt(base.qrSize, 10) || PRESETS[preset].qrSize);
+    return { cols:cols, rows:rows, qrSize:qrSize,
+      nameFont: parseFloat(base.nameFont) || PRESETS[preset].nameFont,
+      codeFont: parseFloat(base.codeFont) || PRESETS[preset].codeFont,
+      specFont: parseFloat(base.specFont) || PRESETS[preset].specFont,
+      padding:  parseFloat(base.padding)  || PRESETS[preset].padding,
+      slotCount: cols * rows, preset: preset };
   }
 
-  /* ── OSJ 마스터 행 → 라벨 구조 변환 ── */
+  /* ────────────────────────────────────────
+     품목 데이터 조회
+  ──────────────────────────────────────── */
+
+  /* OSJ 마스터 row → 라벨 객체 변환 */
   function _toLabel(row) {
     if (!row) return null;
-    var b = String(row.code || row.barcode || row.itemCode || row.item_code || row['품목코드'] || '').trim();
-    var n = String(row.name || row.itemName || row.item_name || row['품목명'] || '').trim();
-    if (!b || !n) return null;
+    var b = String(
+      row.code || row.barcode || row.itemCode || row.item_code || row['품목코드'] || ''
+    ).trim();
+    var n = String(
+      row.name || row.itemName || row.item_name || row['품목명'] || ''
+    ).trim();
+    /* 코드와 품명 중 하나라도 있으면 포함 (QR은 코드 없을 시 품명 사용) */
+    if (!b && !n) return null;
     return {
-      b: b,
-      n: n,
-      s: String(row.spec     || row.model   || row['규격']     || '').trim(),
-      u: String(row.unit     || row['단위']  || 'EA').trim(),
-      c: String(row.category || row.cat     || row['분류']     || row['카테고리'] || '').trim()
+      b: b || n,    /* QR용 코드 (없으면 품명으로 대체) */
+      n: n || b,    /* 표시 품명 */
+      s: String(row.spec || row.model || row['규격'] || '').trim(),
+      u: String(row.unit || row['단위'] || 'EA').trim(),
+      c: String(row.category || row.cat || row['분류'] || row['카테고리'] || '').trim()
     };
   }
 
-  /* ── 전체 품목 조회 ── */
   function getAllItems() {
     if (typeof _getItems !== 'function') {
-      _dbg('getAllItems: _getItems is NOT a function', typeof _getItems);
+      _log('getAllItems: _getItems is NOT a function (type=' + typeof _getItems + ')');
       return [];
     }
     var rows = _getItems() || [];
-    _dbg('getAllItems: getMaster() returned', rows.length, 'rows');
-    if (rows.length > 0) _dbg('getAllItems: first row =', JSON.stringify(rows[0]));
+    _log('getAllItems: getMaster() returned', rows.length, 'rows');
+    if (rows.length > 0) {
+      _log('getAllItems: sample[0] =', JSON.stringify(rows[0]));
+    } else {
+      _log('getAllItems: EMPTY — 품목마스터에 데이터가 없습니다');
+    }
     var result = [];
     for (var i = 0; i < rows.length; i++) {
       var item = _toLabel(rows[i]);
       if (item) result.push(item);
+      else _log('getAllItems: row[' + i + '] filtered out =', JSON.stringify(rows[i]));
     }
-    _dbg('getAllItems: after toLabel filter =', result.length, 'items');
+    _log('getAllItems: final count =', result.length);
     return result;
   }
 
-  /* ── HTML 이스케이프 ── */
+  /* 검색어로 필터링 */
+  function _queryItems(v) {
+    if (!v || !v.trim()) return [];
+    var all   = getAllItems();
+    var lower = v.trim().toLowerCase();
+    var res   = all.filter(function(it) {
+      return (it.b || '').toLowerCase().indexOf(lower) >= 0 ||
+             (it.n || '').toLowerCase().indexOf(lower) >= 0 ||
+             (it.s || '').toLowerCase().indexOf(lower) >= 0 ||
+             (it.c || '').toLowerCase().indexOf(lower) >= 0;
+    }).slice(0, 25);
+    _log('_queryItems("' + v + '"): matched', res.length, '/ total', all.length);
+    return res;
+  }
+
+  /* ────────────────────────────────────────
+     직접 입력 추가 (Enter 키 / 정확히 일치하는 코드 즉시 추가)
+  ──────────────────────────────────────── */
+  function pickFirstOrDirect(value) {
+    var v = String(value || '').trim();
+    if (!v) return;
+
+    _log('pickFirstOrDirect: input =', v);
+    var items = getAllItems();
+    _log('pickFirstOrDirect: items count =', items.length);
+
+    /* 1순위: 품목코드 정확 일치 */
+    var exact = null;
+    for (var i = 0; i < items.length; i++) {
+      if ((items[i].b || '').toLowerCase() === v.toLowerCase()) {
+        exact = items[i]; break;
+      }
+    }
+    /* 2순위: 품목명 정확 일치 */
+    if (!exact) {
+      for (var j = 0; j < items.length; j++) {
+        if ((items[j].n || '').toLowerCase() === v.toLowerCase()) {
+          exact = items[j]; break;
+        }
+      }
+    }
+    /* 3순위: 부분 일치 첫 번째 */
+    if (!exact) {
+      var matches = _queryItems(v);
+      if (matches.length) exact = matches[0];
+    }
+
+    if (exact) {
+      _pick(exact);
+    } else {
+      _log('pickFirstOrDirect: no match for "' + v + '"');
+      if (typeof _onToast === 'function') {
+        _onToast('일치하는 품목 없음: ' + v);
+      } else {
+        alert('일치하는 품목이 없습니다: ' + v);
+      }
+    }
+  }
+
+  /* ────────────────────────────────────────
+     유틸리티
+  ──────────────────────────────────────── */
   function _esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -141,9 +216,8 @@ var LabelPrint = (function() {
       var parsed = JSON.parse(localStorage.getItem(_slotsKey) || 'null');
       if (Array.isArray(parsed)) {
         var n = getTotalSlots();
-        var next = [];
-        for (var i = 0; i < n; i++) next.push(parsed[i] || null);
-        SLOTS = next;
+        SLOTS = [];
+        for (var i = 0; i < n; i++) SLOTS.push(parsed[i] || null);
       }
     } catch(e) {}
   }
@@ -167,18 +241,18 @@ var LabelPrint = (function() {
   }
 
   function _applyVars() {
-    var lc     = getLabelConfig();
+    var lc     = _getLabelConfig();
     var preset = getCurrentPreset();
     var root   = document.getElementById('labelPrintRoot') || document.querySelector('.label-print');
     if (!root) return;
     root.setAttribute('data-label-sheet', preset);
-    root.style.setProperty('--label-cols',      lc.cols);
-    root.style.setProperty('--label-rows',      lc.rows);
-    root.style.setProperty('--label-qr-size',   lc.qrSize   + 'px');
-    root.style.setProperty('--label-name-font', lc.nameFont + 'pt');
-    root.style.setProperty('--label-code-font', lc.codeFont + 'pt');
-    root.style.setProperty('--label-spec-font', lc.specFont + 'pt');
-    root.style.setProperty('--label-card-padding', lc.padding + 'pt');
+    root.style.setProperty('--label-cols',         lc.cols);
+    root.style.setProperty('--label-rows',         lc.rows);
+    root.style.setProperty('--label-qr-size',      lc.qrSize   + 'px');
+    root.style.setProperty('--label-name-font',    lc.nameFont + 'pt');
+    root.style.setProperty('--label-code-font',    lc.codeFont + 'pt');
+    root.style.setProperty('--label-spec-font',    lc.specFont + 'pt');
+    root.style.setProperty('--label-card-padding', lc.padding  + 'pt');
     root.classList.toggle('compact', preset === '3x8');
   }
 
@@ -192,7 +266,7 @@ var LabelPrint = (function() {
   }
 
   function _makeQR(container, code) {
-    var size = getLabelConfig().qrSize;
+    var size = _getLabelConfig().qrSize;
     container.innerHTML = '';
     try {
       new QRCode(container, {
@@ -204,87 +278,72 @@ var LabelPrint = (function() {
   }
 
   /* ────────────────────────────────────────
-     자동완성 검색
+     자동완성 UI
   ──────────────────────────────────────── */
-  function _queryItems(v) {
-    if (!v) return [];
-    var all   = getAllItems();
-    var lower = v.toLowerCase();
-    var res   = all.filter(function(it) {
-      return it.b.toLowerCase().indexOf(lower) >= 0 ||
-             it.n.toLowerCase().indexOf(lower) >= 0 ||
-             (it.s || '').toLowerCase().indexOf(lower) >= 0 ||
-             (it.c || '').toLowerCase().indexOf(lower) >= 0;
-    }).slice(0, 25);
-    _dbg('_queryItems("' + v + '"): matched', res.length, '/ total', all.length);
-    return res;
-  }
-
   function _hideSugg() {
     var sugg = document.getElementById('label-sugg');
     if (sugg) sugg.style.display = 'none';
   }
 
-  /* 검색 입력 핸들러 */
-  function _onSearch() {
-    var q    = document.getElementById('label-q');
+  function _showSugg(items, q) {
     var sugg = document.getElementById('label-sugg');
+    if (!sugg) { _log('ERROR: #label-sugg NOT FOUND'); return; }
+    if (!items.length) { sugg.style.display = 'none'; return; }
 
-    _dbg('_onSearch fired. q=', !!q, ' sugg=', !!sugg,
-         ' value=', q ? q.value : 'N/A');
-
-    if (!sugg) {
-      _dbg('ERROR: #label-sugg element NOT FOUND in DOM');
-      return;
-    }
-
-    var v = (q ? q.value : '').trim();
-    if (!v) { sugg.style.display = 'none'; return; }
-
-    var res = _queryItems(v);
-    _dbg('_onSearch results:', res.length, ' first=', res[0] ? JSON.stringify(res[0]) : 'none');
-
-    if (!res.length) { sugg.style.display = 'none'; return; }
-
-    /* ── overflow:hidden 부모 우회: position:fixed + getBoundingClientRect ── */
+    /* position:fixed — overflow:hidden 부모 완전 우회 */
     if (q) {
-      var rect = q.getBoundingClientRect();
-      sugg.style.position = 'fixed';
-      sugg.style.top      = rect.bottom + 'px';
-      sugg.style.left     = rect.left   + 'px';
-      sugg.style.width    = rect.width  + 'px';
-      sugg.style.right    = 'auto';
-      sugg.style.zIndex   = '99999';
-      _dbg('_onSearch: fixed position set. top=', rect.bottom, 'left=', rect.left, 'width=', rect.width);
+      try {
+        var rect = q.getBoundingClientRect();
+        sugg.style.position = 'fixed';
+        sugg.style.top    = rect.bottom + 'px';
+        sugg.style.left   = rect.left   + 'px';
+        sugg.style.width  = rect.width  + 'px';
+        sugg.style.right  = 'auto';
+        sugg.style.zIndex = '99999';
+      } catch(e) {}
     }
 
     sugg.innerHTML = '';
-    res.forEach(function(it) {
+    items.forEach(function(it) {
       var row = document.createElement('div');
       row.className = 'lp-si';
       row.innerHTML =
         '<span class="lp-sm">' + _esc(it.b) + '</span>' +
-        '<span>' + _esc(it.n) + '</span>' +
+        '<span>'               + _esc(it.n) + '</span>' +
         (it.s ? '<span style="font-size:11px;color:#888">' + _esc(it.s) + '</span>' : '');
-      (function(item) { row.onclick = function(e) { e.stopPropagation(); _pick(item); }; })(it);
+      (function(item) {
+        row.addEventListener('mousedown', function(e) {
+          e.preventDefault();   /* input blur 방지 */
+          _pick(item);
+        });
+      })(it);
       sugg.appendChild(row);
     });
-
     sugg.style.display = 'block';
-    _dbg('_onSearch: sugg.style.display=block done. innerHTML.length=', sugg.innerHTML.length,
-         ' computed=', window.getComputedStyle ? window.getComputedStyle(sugg).display : 'N/A');
+    _log('_showSugg: displayed', items.length, 'items');
   }
 
+  /* input 이벤트 핸들러 */
+  function _onSearch() {
+    var q = document.getElementById('label-q');
+    var v = q ? q.value : '';
+    _log('_onSearch: value="' + v + '" items=' + getAllItems().length);
+    var res = _queryItems(v);
+    _showSugg(res, q);
+  }
+
+  /* keydown 이벤트 핸들러 */
   function _onKeydown(e) {
     var q = document.getElementById('label-q');
     if (e.key === 'Enter') {
+      e.preventDefault();
       var v = q ? q.value.trim() : '';
-      var r = _queryItems(v);
-      if (r.length) _pick(r[0]);
+      pickFirstOrDirect(v);   /* 직접 입력 추가 */
     }
     if (e.key === 'Escape') _hideSugg();
   }
 
+  /* 슬롯에 품목 추가 */
   function _pick(item) {
     var n     = getTotalSlots();
     var qty   = parseInt((document.getElementById('label-qty') || {}).value || '1', 10) || 1;
@@ -302,6 +361,7 @@ var LabelPrint = (function() {
     var q = document.getElementById('label-q');
     if (q) q.value = '';
     _hideSugg();
+    _log('_pick: added', added, 'slots. item=', item.b, item.n);
   }
 
   function _clearAll() {
@@ -318,8 +378,8 @@ var LabelPrint = (function() {
     document.querySelectorAll('#label-grid .qb canvas').forEach(function(cvs) {
       var p = cvs.parentNode;
       if (p && !p.querySelector('img')) {
-        var img = document.createElement('img'); img.src = cvs.toDataURL('image/png'); img.alt = '';
-        p.appendChild(img);
+        var img = document.createElement('img');
+        img.src = cvs.toDataURL('image/png'); img.alt = ''; p.appendChild(img);
       }
     });
     setTimeout(function() {
@@ -332,39 +392,39 @@ var LabelPrint = (function() {
   }
 
   /* ────────────────────────────────────────
-     이벤트 바인딩 (init마다 호출, 요소별 dedup)
+     이벤트 바인딩 (매 init마다 호출, 요소별 dedup)
   ──────────────────────────────────────── */
   function _bindEvents() {
-    /* ① 검색 입력 */
-    var q = document.getElementById('label-q');
-    _dbg('_bindEvents: #label-q =', !!q,
-         q ? ('already bound=' + (q.dataset.lpBound || 'no')) : '');
+    /* 검색 입력: #label-q (OSJ) 또는 #lbl-q (fallback) */
+    var q = document.getElementById('label-q') || document.getElementById('lbl-q');
+    _log('_bindEvents: search input =', q ? ('#' + q.id) : 'NOT FOUND',
+         q ? ('bound=' + (q.dataset.lpBound || 'no')) : '');
+
     if (q && !q.dataset.lpBound) {
       q.dataset.lpBound = '1';
       q.addEventListener('input',   _onSearch);
       q.addEventListener('keydown', _onKeydown);
-      _dbg('_bindEvents: input event bound to #label-q');
+      _log('_bindEvents: events bound to #' + q.id);
     }
 
-    /* ② 문서 클릭으로 제안 닫기 */
+    /* 추천 목록 닫기 (문서 클릭) */
     if (!_clickBound) {
       _clickBound = true;
       document.addEventListener('click', function(e) {
         var t = e.target;
-        var inside = t.closest ? t.closest('.lp-sw') : null;
-        if (!inside) _hideSugg();
+        if (!(t.closest ? t.closest('.lp-sw') : false)) _hideSugg();
       });
     }
 
-    /* ③ 버튼 */
+    /* 버튼 */
     var btnP = document.getElementById('label-btn-print');
     var btnC = document.getElementById('label-btn-clear');
-    if (btnP && !btnP.dataset.lpBound) { btnP.dataset.lpBound = '1'; btnP.addEventListener('click', _print);    }
-    if (btnC && !btnC.dataset.lpBound) { btnC.dataset.lpBound = '1'; btnC.addEventListener('click', _clearAll); }
+    if (btnP && !btnP.dataset.lpBound) { btnP.dataset.lpBound='1'; btnP.addEventListener('click', _print);    }
+    if (btnC && !btnC.dataset.lpBound) { btnC.dataset.lpBound='1'; btnC.addEventListener('click', _clearAll); }
 
-    /* ④ 프리셋 select */
+    /* 프리셋 select */
     var ps = document.getElementById('labelPreset');
-    if (ps && !ps.dataset.lpBound) { ps.dataset.lpBound = '1'; ps.addEventListener('change', _onPresetChange); }
+    if (ps && !ps.dataset.lpBound) { ps.dataset.lpBound='1'; ps.addEventListener('change', _onPresetChange); }
   }
 
   /* ────────────────────────────────────────
@@ -376,7 +436,7 @@ var LabelPrint = (function() {
     _buildSS();
 
     var grid = document.querySelector('#tab-label #label-grid') || document.getElementById('label-grid');
-    if (!grid) { _dbg('renderGrid: #label-grid NOT FOUND'); return; }
+    if (!grid) { _log('renderGrid: #label-grid NOT FOUND'); return; }
 
     var preset = getCurrentPreset();
     var n      = getTotalSlots();
@@ -394,7 +454,7 @@ var LabelPrint = (function() {
       if (slot) {
         var rm = document.createElement('button');
         rm.className = 'brm'; rm.innerHTML = '&#10005;';
-        (function(idx) { rm.onclick = function() { SLOTS[idx] = null; renderGrid(); _saveSlots(); }; })(i);
+        (function(idx) { rm.onclick = function() { SLOTS[idx]=null; renderGrid(); _saveSlots(); }; })(i);
         card.appendChild(rm);
 
         var qb = document.createElement('div'); qb.className = 'qb'; card.appendChild(qb);
@@ -411,9 +471,11 @@ var LabelPrint = (function() {
             '<div class="lb">' + _esc(slot.b) + '</div>';
         }
         card.appendChild(li);
+
         (function(el, code, delay) {
           setTimeout(function() { _makeQR(el, code); }, delay);
         })(qb, slot.b, i * 40);
+
       } else {
         var et = document.createElement('div'); et.className = 'et'; et.textContent = '빈 슬롯';
         card.appendChild(et);
@@ -423,15 +485,13 @@ var LabelPrint = (function() {
     _updCnt();
   }
 
-  /* ── labelPreset 변경 처리 ── */
+  /* ── 프리셋 변경 ── */
   function _onPresetChange() {
     var preset = getCurrentPreset();
     var setEl  = document.getElementById('setLabelPreset');
     if (setEl) setEl.value = (preset === '3x8') ? 'small' : 'normal';
     try {
-      localStorage.setItem(_cfgKey(), JSON.stringify(
-        Object.assign({ preset: preset }, LABEL_PRESETS[preset])
-      ));
+      localStorage.setItem(_cfgKey(), JSON.stringify(Object.assign({preset:preset}, PRESETS[preset])));
     } catch(e) {}
     ensureLabelSlots();
     renderGrid();
@@ -443,23 +503,25 @@ var LabelPrint = (function() {
     var preset = '2x6';
     try {
       var o = JSON.parse(localStorage.getItem(_cfgKey()) || 'null');
-      if (o && (o.preset === '3x8' || o.preset === 'small' ||
-          (Number(o.cols) === 3 && Number(o.rows) === 8))) preset = '3x8';
+      if (o && (o.preset==='3x8'||o.preset==='small'||
+          (Number(o.cols)===3&&Number(o.rows)===8))) preset = '3x8';
     } catch(e) {}
     el.value = preset;
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
      공개 API
-  ═══════════════════════════════════════ */
+  ════════════════════════════════════════ */
   return {
     init: function(opts) {
       _getItems = opts.getMasterItems || opts.getItems || null;
       _slotsKey = opts.slotsKey || '';
       _onToast  = opts.onToast  || null;
 
-      _dbg('init() called. _getItems type=', typeof _getItems,
-           ' _loaded=', _loaded);
+      _log('init() called.',
+           '_getItems=', typeof _getItems,
+           'masterCount=', (typeof _getItems==='function' ? (_getItems()||[]).length : 'N/A'),
+           '_loaded=', _loaded);
 
       if (!_loaded) {
         _initPresetSelect();
@@ -467,26 +529,21 @@ var LabelPrint = (function() {
         _loaded = true;
       }
 
-      /* 매 init마다 bindEvents — 내부에서 중복 방지 */
-      _bindEvents();
-
+      _bindEvents();       /* 매 init마다 — 내부에서 중복 방지 */
       ensureLabelSlots();
       renderGrid();
-
-      _dbg('init() done. preset=', getCurrentPreset(),
-           ' slots=', getTotalSlots(),
-           ' masterItems=', (typeof _getItems === 'function' ? (_getItems() || []).length : 'N/A'));
     },
 
-    renderGrid:       renderGrid,
-    onPresetChange:   _onPresetChange,
-    getCurrentPreset: getCurrentPreset,
-    getTotalSlots:    getTotalSlots,
-    ensureLabelSlots: ensureLabelSlots,
+    renderGrid:         renderGrid,
+    onPresetChange:     _onPresetChange,
+    getCurrentPreset:   getCurrentPreset,
+    getTotalSlots:      getTotalSlots,
+    ensureLabelSlots:   ensureLabelSlots,
+    pickFirstOrDirect:  pickFirstOrDirect,
 
     refresh: function() {
       var map = {};
-      getAllItems().forEach(function(it) { map[it.b] = it; });
+      getAllItems().forEach(function(it) { if(it.b) map[it.b] = it; });
       var changed = false;
       SLOTS = SLOTS.map(function(s) {
         if (!s) return null;
