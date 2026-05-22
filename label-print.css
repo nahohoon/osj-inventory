@@ -18,7 +18,8 @@
 .label-print .lp-sw{position:relative;flex:1 1 240px;min-width:180px}
 .label-print #label-q{border:1.5px solid #b0c0d8;border-radius:6px;padding:8px 11px;font-size:14px;width:100%;font-family:inherit}
 .label-print #label-q:focus{outline:none;border-color:var(--cp,#0F2448)}
-.label-print #label-sugg{position:absolute;z-index:999;background:#fff;border:1.5px solid var(--cp,#0F2448);border-radius:6px;top:100%;left:0;right:0;max-height:260px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.15);display:none}
+/* JS에서 position:fixed + getBoundingClientRect로 위치 결정 (overflow:hidden 우회) */
+.label-print #label-sugg{position:fixed;z-index:99999;background:#fff;border:1.5px solid var(--cp,#0F2448);border-radius:6px;max-height:260px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.2);display:none}
 .label-print .lp-si{padding:8px 13px;cursor:pointer;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;align-items:center;font-size:13px}
 .label-print .lp-si:hover{background:#f0f4ff}
 .label-print .lp-sm{font-family:monospace;font-size:11.5px;font-weight:700;color:#333;flex-shrink:0}
